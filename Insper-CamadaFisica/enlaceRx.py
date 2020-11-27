@@ -9,6 +9,7 @@
 
 # Importa pacote de tempo
 import time
+import datetime
 
 # Threads
 import threading
@@ -68,9 +69,47 @@ class RX(object):
         return(b)
 
     def getNData(self, size):
+
+
+
+        # delta = False
+        restart = False
+        counter = 0 
+
+        # if restart == True:
+        #     start_time = time.time()
+        start_time = time.time()
         while(self.getBufferLen() < size):
-            time.sleep(0.05)                 
+            TIMEOUT = False
+            
+            end_time = time.time()
+            delta = (end_time - start_time)
+            time.sleep(0.05)
+           
+            if delta > 5 and counter < 20:
+                # self.threadStop = True
+                print("servidor inativo, tentando novamente...")
+                
+                # self.threadStop = False
+                # a = input("Servidor Inativo, tentar novamente? ")
+                # if a == "s":
+                    # restar_times += 1
+                    # restart = True
+                delta = 0
+                start_time = time.time()
+                counter += 5
+                print("{} segundos corridos...".format(counter))
+                if counter == 20:
+
+                    return "TIMEOUT"
+                    TIMEOUT = True
+                
+                # restart = True
+                # print("reiniciando")
+            
+
         return(self.getBuffer(size))
+        
 
 
     def clearBuffer(self):

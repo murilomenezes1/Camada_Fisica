@@ -12,6 +12,8 @@
 
 from enlace import * 
 import time
+import datetime
+from multiprocessing import Process, Queue
 
 from timeit import default_timer as timer
 
@@ -23,27 +25,9 @@ from timeit import default_timer as timer
 #use uma das 3 opcoes para atribuir à variável a porta usada
 #serialName = "/dev/ttyACM0"           # Ubuntu (variacao de)
 #serialName = "/dev/tty.usbmodem1411" # Mac    (variacao de)
-serialName = "COM1"                  # Windows(variacao de)
+serialName = "COM3"                  # Windows(variacao de)
 
 
-
-
- 
-def header(payload,current_p, total_p):
-
-	print("montando header")
-
-	payload_size = (payload).to_bytes(4, byteorder='big')
-
-	print("payload size ok!")
-	payload_number = current_p.to_bytes(2, byteorder='big')
-	print("payload number ok!")
-	total_number = total_p.to_bytes(4,byteorder='big')
-	print("total number ok!")
-
-	header = payload_size + payload_number + total_number
-
-	return header
 
 
 
@@ -67,19 +51,58 @@ def main():
 			com.enable()
 			print("comunicação aberta com sucesso. porta {}".format(serialName))
 
+
+		log = open("client_log.txt","w")
+		server_id = 0 
+		TIMEOUT = False
+
+
+		def retry(fun, max_tries=5):
+			tentativa = 2 
+			for i in range(max_tries):
+				print("tentativa numero {}.".format(tentativa))
+				print("proxima tentativa em 5 segundos")
+				log.write('{} / envio / 5\n'.format(datetime.datetime.now()))
+				tentativa+=1
+				try:
+				   time.sleep(5)
+
+				   fun()
+				   break
+				except Exception:
+					continue
+			print("tempo esgotado!")
+			
+
 		while comms:
 
 			if STATE == "Start":
-				print("Iniciando...")
-				# header1 = header(255,0,0)
-				payload_size = (1).to_bytes(4, byteorder='big')
+
+				txBuffer0 = open(imageR,'rb').read()
+				txSize0 = len(txBuffer0)
+
+				if txSize0 % 114 == 0:
+					total_p0 = txSize0//114
+
+				else:
+					total_p0 = txSize0//114 + 1
+			
+				h0 = (1).to_bytes(1, byteorder='big')
+				h1 = (0).to_bytes(1, byteorder='big')
+				h2 = server_id.to_bytes(1,byteorder='big')
+				h3 = total_p0.to_bytes(1,byteorder='big')
 				print("payload size ok!")
-				payload_number = (0).to_bytes(2, byteorder='big')
+				h4 = (0).to_bytes(1, byteorder='big')
 				print("payload number ok!")
-				total_number = (0).to_bytes(4,byteorder='big')
+				h5 = (0).to_bytes(1, byteorder='big')
+				h6 = (0).to_bytes(1,byteorder='big')
+				h7 = (0).to_bytes(1,byteorder='big')
+				h8 = (0).to_bytes(1,byteorder='big')
+				h9 = (0).to_bytes(1,byteorder='big')
+				
 				print("total number ok!")
 
-				header = payload_size + payload_number + total_number
+				header = h0 + h1 + h2 + h3 + h4 + h5 + h6 + h7 + h8 + h9
 
 				print("header ok!")
 				eop = (0).to_bytes(4,byteorder='big')
@@ -87,19 +110,25 @@ def main():
 				pkt = header+eop
 				print("pkt ok!")
 				com.sendData(pkt)
+				log.write('{} / envio / 1 / {} / 0 / {}\n'.format(datetime.datetime.now(),txSize0, total_p0))
 				print("enviando handshake...")
+				print('{} / envio / 1 / {} / 0 / {} - LOGGED'.format(datetime.datetime.now(),txSize0, total_p0))
 				STATE = "waiting"
 
 			if STATE == "waiting":
 
 				print("Aguardando resposta do server...")
+			
 
-				hst = time.time()
 				wait = True
+
+
 
 				while wait:
 
-					rxBuffer,nRx = com.getData(14)
+					# rxBuffer,nRx = retry(com.getData(14))
+					rxBuffer, nRx = com.getData(14)
+					log.write('{} / recebimento / 2 / {}\n'.format(datetime.datetime.now(),len(rxBuffer)))
 					if len(rxBuffer) == 14:
 						print("Server ativo!")
 						STATE = "Connected"
@@ -107,21 +136,8 @@ def main():
 						wait = False
 						print("wait false")
 
-					het = time.time()
-					dht = hst - het
 
-					if dht > 5:
-						wait = False  
-						retry = input("Server inativo. tentar novamente? [s/n]: ")
-						if retry == "s":
-							STATE = "Start"
-
-						elif retry == "n":
-							print("Encerrando")
-						
-							break
-
-			if STATE == "Connected":
+			if STATE == "Connected" and TIMEOUT == False:
 
 				print("Conectando...")
 
@@ -147,7 +163,7 @@ def main():
 				p_left = total_p
 				pacotes_enviados = 0
 
-				while txSize > 0:
+				while txSize > 0 and STATE != "Disconnected":
 
 					print("txSize maior que 0")
 
@@ -155,31 +171,30 @@ def main():
 
 						print("fragmentando...")
 
-						payload_size = (114).to_bytes(1, byteorder='big')
-						print("payload size ok!")
-						payload_number = (current_p).to_bytes(1, byteorder='big')
-						print("payload number ok!")
-						total_number = (total_p).to_bytes(1,byteorder='big')
-						print("total number ok!")
-						h3 = (0).to_bytes(1,byteorder='big')
-						h4 = (0).to_bytes(1,byteorder='big')
-						h5 = (0).to_bytes(1,byteorder='big')
-						h6 = (0).to_bytes(1,byteorder='big')
-						h7 = (0).to_bytes(1,byteorder='big')
+						h0 = (3).to_bytes(1, byteorder='big')
+						h1 = (0).to_bytes(1, byteorder='big')
+						h2 = server_id.to_bytes(1, byteorder='big')
+						h3 = (total_p).to_bytes(1,byteorder='big')
+						h4 = (current_p).to_bytes(1, byteorder='big')
+						h5 = (114).to_bytes(1, byteorder='big')
+						h6 = (current_p).to_bytes(1,byteorder='big')
+						h7 = (current_p-1).to_bytes(1,byteorder='big')
 						h8 = (0).to_bytes(1,byteorder='big')
 						h9 = (0).to_bytes(1,byteorder='big')
 
 						
 
-						header = payload_size + payload_number + total_number + h3 + h4 + h5 + h6 + h7 + h8 + h9
+						header = h0 + h1 + h2 + h3 + h4 + h5 + h6 + h7 + h8 + h9
 						print("header ok!")
-						payload = txBuffer[i:i+115]
+						payload = txBuffer[i:i+114]
 						print("payload ok!")
 						eop2 = (0).to_bytes(4,byteorder='big')
 						pkt2 = header + payload + eop2
 
 
 						com.sendData(pkt2)
+						log.write('{} / envio / 3 / {} / {} / 0 / {}\n'.format(datetime.datetime.now(),txSize, current_p, total_p))
+						print('{} / envio / 3 / {} / {} / 0 / {} - LOGGED'.format(datetime.datetime.now(),txSize, current_p, total_p))
 						# com.sendData(header)
 						# print("header enviado")
 						# com.sendData(payload)
@@ -191,44 +206,84 @@ def main():
 
 
 						time.sleep(0.1)
-						respostaServer, rxBuffer = com.getData(4)
+						HeaderRespostaServer, HeaderRxBuffer = com.getData(10)
+						log.write('{} / recebimento / 4 / {}\n'.format(datetime.datetime.now(),len(HeaderRespostaServer)))
+						print('{} / recebimento / 4 / {}\n'.format(datetime.datetime.now(),len(HeaderRespostaServer)))
 
-						if respostaServer == eop2:
+						if HeaderRespostaServer == "TIMEOUT":
 
-							current_p += 1
-							i += 114
-							txSize -= 114
-							p_left -= 1
-							pacotes_enviados += 1
-						else:
+							print("TIMEOUT")
+							h0 = (5).to_bytes(1, byteorder='big')
+							h1 = (0).to_bytes(1, byteorder='big')
+							h2 = (0).to_bytes(1, byteorder='big')
+							h3 = (0).to_bytes(1,byteorder='big')
+							h4 = (0).to_bytes(1, byteorder='big')
+							h5 = (0).to_bytes(1, byteorder='big')
+							h6 = (0).to_bytes(1,byteorder='big')
+							h7 = (0).to_bytes(1,byteorder='big')
+							h8 = (0).to_bytes(1,byteorder='big')
+							h9 = (0).to_bytes(1,byteorder='big')
 
-							print("Erro! Eop na posicao errada. Tamanho de payload incorreto")
+							pkt_timeout = h0 + h1 + h2 + h3 + h4 + h5 + h6 + h7 + h8 + h9 + EopRespostaServer
+							print("Timeout package ok!")
+
+							# com.sendData(pkt_timeout)
+							log.write("{} / envio / 5\n".format(datetime.datetime.now()))
+							print(("{} / 5 - LOGGED".format(datetime.datetime.now())))
+
+							TIMEOUT = True
+							print("TIMEOUT TRUE")
+							# com.disable()
+							# print("COM DISABLED.")
+							STATE = "Disconnected"
+							print("mudando para estado DISCONNECTED")
+							comms = False
+							
+
+						else:	
+							
 
 
-						print("Pacote Atual: {}".format(current_p))
-						print("Tamanho restante: {}".format(txSize))
-						# print("Numero de pacotes restantes: {}".format(total_p-current_p))
-						print("pacotes enviados: {}".format(pacotes_enviados))
+							EopRespostaServer, EopRxBuffer = com.getData(4)
+
+							log.write('{} / recebimento / 4 / {}\n'.format(datetime.datetime.now(),len(EopRespostaServer)))
+							print('{} / recebimento / 4 / {}\n'.format(datetime.datetime.now(),len(EopRespostaServer)))
+
+							if EopRespostaServer == eop2:
+
+								current_p += 1
+								i += 114
+								txSize -= 114
+								p_left -= 1
+								pacotes_enviados += 1
+							else:
+
+								print("Erro! Eop na posicao errada. Tamanho de payload incorreto")
+
+							
+
+
+							print("Pacote Atual: {}".format(current_p))
+							print("Tamanho restante: {}".format(txSize))
+							# print("Numero de pacotes restantes: {}".format(total_p-current_p))
+							print("pacotes enviados: {}".format(pacotes_enviados))
 
 					else:
 
 
-						payload_size = txSize.to_bytes(1, byteorder='big')
-						print("payload size ok!")
-						payload_number = (current_p).to_bytes(1, byteorder='big')
-						print("payload number ok!")
-						total_number = (total_p).to_bytes(1,byteorder='big')
-						print("total number ok!")
-						h3 = (0).to_bytes(1,byteorder='big')
-						h4 = (0).to_bytes(1,byteorder='big')
-						h5 = (0).to_bytes(1,byteorder='big')
-						h6 = (0).to_bytes(1,byteorder='big')
-						h7 = (0).to_bytes(1,byteorder='big')
+						h0 = (3).to_bytes(1, byteorder='big')
+						h1 = (0).to_bytes(1, byteorder='big')
+						h2 = server_id.to_bytes(1, byteorder='big')
+						h3 = (total_p).to_bytes(1,byteorder='big')
+						h4 = (current_p).to_bytes(1, byteorder='big')
+						h5 = txSize.to_bytes(1, byteorder='big')
+						h6 = (current_p).to_bytes(1,byteorder='big')
+						h7 = (current_p-1).to_bytes(1,byteorder='big')
 						h8 = (0).to_bytes(1,byteorder='big')
 						h9 = (0).to_bytes(1,byteorder='big')
 
 
-						header = payload_size + payload_number + total_number + h3 + h4 + h5 + h6 + h7 + h8 + h9
+						header = h0 + h1 + h2 + h3 + h4 + h5 + h6 + h7 + h8 + h9
 						print("header ok")
 
 						payload = txBuffer[i:]
@@ -239,6 +294,9 @@ def main():
 						print("pkt ok")
 
 						com.sendData(pkt2)
+						log.write('{} / envio / 3 / {} / {} / 0 / {}\n'.format(datetime.datetime.now(),txSize, current_p, total_p))
+						print('{} / envio / 3 / {} / {} / 0 / {} - LOGGED'.format(datetime.datetime.now(),txSize, current_p, total_p))
+
 						print("ultimo pacote enviado.")
 
 						comms = False
@@ -248,7 +306,12 @@ def main():
 
 
 
+		if STATE == "Disconnected":
 
+			print("Tempo esgotado! encerrando...")
+			log.close()
+			com.disable()
+			
 		if STATE == "End":
 
 			# bytesize = (txSize).to_bytes(4, byteorder='big')
@@ -275,13 +338,19 @@ def main():
 			end = timer()
 			delta_t = end - start
 			txtrans = txSize/delta_t
+
+			log.close()
 			print('Taxa de transferencia: {} bytes por segundo' .format(txtrans))
 			print("-------------------------")
 			print("Comunicação encerrada")
 			print("-------------------------")
 			com.disable()
 	except:
+		log.close()
+		
 		print("ops! :-\\")
+		print("-------------------------")
+		print(" fechando log...")
 		com.disable()
 
 	#so roda o main quando for executado do terminal ... se for chamado dentro de outro modulo nao roda
